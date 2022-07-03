@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity() {
         // apiService.fetchCall().execute()
 
         // performCallType()
-         performNetworkSingleType()
+        performNetworkSingleType()
 
         // singleSimpleExample()
         // maybeSingleExample()
@@ -220,12 +220,12 @@ class MainActivity : AppCompatActivity() {
             }).addTo(compositeDisposable)
     }
 
-    private fun exampleColdObservable(){
-        Flowable.interval(1000,TimeUnit.MILLISECONDS)
+    private fun exampleColdObservable() {
+        Flowable.interval(1000, TimeUnit.MILLISECONDS)
             .onBackpressureBuffer()
             .subscribe({
                 // Do Working
-            },{
+            }, {
 
             }).addTo(compositeDisposable)
     }
@@ -233,19 +233,72 @@ class MainActivity : AppCompatActivity() {
     private val behavior = BehaviorProcessor.create<Long>()
     private val publisher = PublishProcessor.create<Long>()
 
-    private fun exampleHotObservable(){
+    private fun exampleHotObservable() {
         publisher.subscribe({
             Timber.d("One Sub $it")
-        },{
+        }, {
 
         })
         publisher.onNext(System.currentTimeMillis())
         publisher.subscribe({
             Timber.d("Two Sub $it")
-        },{
+        }, {
 
         })
+    }
 
+    private fun exampleOne() {
+        apiService.postLogin()
+            .subscribe({
+                // 로그인 성궁 후 좋아요한 상품 조회
+                if (it.status) {
+                    fetchUserLike()
+                }
+            }, {
+
+            }).addTo(compositeDisposable)
+
+        apiService.postLogin()
+            .flatMap {
+                if (it.status) {
+                    apiService.fetchUserLike()
+                } else {
+                    throw NullPointerException("Login is Fail")
+                }
+            }.subscribe({ list ->
+                // 좋아요한 상품들..
+            }, {
+
+            }).addTo(compositeDisposable)
+    }
+
+    private fun fetchUserLike() {
+        apiService.fetchUserLike().subscribe({}, {}).addTo(compositeDisposable)
+    }
+
+    private fun start() {
+        Single.merge(탑배너(), 하단배너(), 날씨추천상품())
+            .observeOn(AndroidSchedulers.mainThread())
+            .buffer(3)
+            .subscribe({ list ->
+                // buffer 함수를 통해 호출한 데이터들을 한꺼번에 List 형식으로도 처리할수 있습니다.
+            }, {
+
+            }).addTo(compositeDisposable)
+    }
+
+    private fun 탑배너(): Single<String> {
+        return Single.just("탑배너 API 호출해서 데이터에 추가합니다.")
+            .onErrorReturn { "ddd" }
+            .subscribeOn(Schedulers.io())
+    }
+
+    private fun 하단배너(): Single<String> {
+        return Single.just("하단 배너 API 호출해서 데이터에 추가합니다.").subscribeOn(Schedulers.io())
+    }
+
+    private fun 날씨추천상품(): Single<String> {
+        return Single.just("날씨추천상품 API 호출하여 데이터에 추가합니다.").subscribeOn(Schedulers.io())
     }
 
     override fun onDestroy() {
