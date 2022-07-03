@@ -33,8 +33,8 @@ object NetworkController {
         return Retrofit.Builder()
             .baseUrl(baseURL)
             .client(createHttpClient())
-            .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
-            // .addCallAdapterFactory(RxJava3CallAdapterFactory.createWithScheduler(Schedulers.io()))
+            // .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
+            .addCallAdapterFactory(RxJava3CallAdapterFactory.createWithScheduler(Schedulers.io()))
             .addConverterFactory(jsonFormat.asConverterFactory(MediaType.get("application/json")))
             .build()
     }

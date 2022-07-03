@@ -1,20 +1,30 @@
 package com.hmju.rx
 
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import com.hmju.rx.network.ApiService
 import com.hmju.rx.network.NetworkController
+import com.hmju.rx.network.model.SimplePayload
 import com.hmju.rx.network.model.SimpleResponse
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.core.*
 import io.reactivex.rxjava3.disposables.CompositeDisposable
+import io.reactivex.rxjava3.disposables.Disposable
+import io.reactivex.rxjava3.functions.Action
+import io.reactivex.rxjava3.functions.Consumer
 import io.reactivex.rxjava3.kotlin.addTo
+import io.reactivex.rxjava3.processors.BehaviorProcessor
+import io.reactivex.rxjava3.processors.PublishProcessor
 import io.reactivex.rxjava3.schedulers.Schedulers
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import timber.log.Timber
-import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import kotlin.random.Random
+import kotlin.random.nextInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,24 +35,37 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private val tvTitle: TextView by lazy { findViewById(R.id.tvTitle) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         // Do Not MainThread
         // apiService.fetchCall().execute()
 
-        performCallType()
-        performSingleType()
+        // performCallType()
+         performNetworkSingleType()
+
+        // singleSimpleExample()
+        // maybeSingleExample()
+        exampleHotObservable()
+    }
+
+    override fun onBackPressed() {
+        super.onBackPressed()
+        finishAffinity()
     }
 
     private fun performCallType() {
-        Executors.newCachedThreadPool().execute {
+        Executors.newCachedThreadPool().submit {
             apiService.fetchCall().enqueue(object : Callback<SimpleResponse> {
                 override fun onResponse(
                     call: Call<SimpleResponse>,
                     response: Response<SimpleResponse>
                 ) {
-                    Timber.d("onResponse $response")
+                    // UI Thread
+                    val payload = toPayload(response.body())
+                    tvTitle.text = payload.toString()
                 }
 
                 override fun onFailure(call: Call<SimpleResponse>, t: Throwable) {
@@ -52,15 +75,177 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun performSingleType() {
+    @Throws(NullPointerException::class)
+    private fun toPayload(res: SimpleResponse?): SimplePayload {
+        return res?.data?.payload ?: throw NullPointerException("payload is Null")
+    }
+
+    private fun performNetworkSingleType() {
         apiService.fetchSingle()
+            .map { toPayload(it) }
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
-                Timber.d("SUCC $it")
+                // API 요청하고 toPayload 로 데이터 가공할때까지 Cache Thread
+                // Current UI Thread
+                tvTitle.text = it.toString()
             }, {
                 Timber.d("ERROR $it")
             }).addTo(compositeDisposable)
+    }
+
+    private fun singleSimpleExample() {
+        Single.just(System.currentTimeMillis())
+            .subscribe(object : SingleObserver<Long> {
+                override fun onSubscribe(d: Disposable) {
+                    d.addTo(compositeDisposable)
+                }
+
+                override fun onSuccess(t: Long) {
+                    Timber.d("onSuccess $t")
+                }
+
+                override fun onError(e: Throwable) {
+                    Timber.d("onError $e")
+                }
+            })
+
+        Single.create<Long> { emitter ->
+            if (Random.nextBoolean()) {
+                emitter.onSuccess(System.currentTimeMillis())
+            } else {
+                emitter.onError(RuntimeException("Sample Error"))
+            }
+        }.subscribe(object : Consumer<Long> {
+            override fun accept(t: Long) {
+                Timber.d("SUCC $t")
+            }
+        }, object : Consumer<Throwable> {
+            override fun accept(t: Throwable) {
+                Timber.d("ERROR")
+            }
+        }).addTo(compositeDisposable)
+    }
+
+    private fun maybeSingleExample() {
+        Maybe.just(System.currentTimeMillis())
+            .subscribe(object : Consumer<Long> {
+                override fun accept(t: Long) {
+                    Timber.d("SUCC $t")
+                }
+            }, object : Consumer<Throwable> {
+                override fun accept(t: Throwable) {
+                    Timber.d("ERROR")
+                }
+            }, object : Action {
+                override fun run() {
+                    Timber.d("onCompleted")
+                }
+            }).addTo(compositeDisposable)
+
+        Maybe.create<Long> { emitter ->
+            val ran = Random.nextInt(0 until 10)
+            if (ran < 3) {
+                emitter.onSuccess(System.currentTimeMillis())
+            } else if (ran in 3..5) {
+                emitter.onError(RuntimeException("Sample Error"))
+            } else {
+                emitter.onComplete()
+            }
+        }.subscribe(object : Consumer<Long> {
+            override fun accept(t: Long) {
+                Timber.d("SUCC $t")
+            }
+        }, object : Consumer<Throwable> {
+            override fun accept(t: Throwable) {
+                Timber.d("ERROR")
+            }
+        }, object : Action {
+            override fun run() {
+                Timber.d("onCompleted")
+            }
+        }).addTo(compositeDisposable)
+    }
+
+    private fun exampleFlowableBackPress() {
+        Flowable.interval(100, TimeUnit.MILLISECONDS)
+            .onBackpressureBuffer()
+            .subscribe({
+                // 여기서의 처리가 500ms 걸리는 경우 배압 이슈가 생깁니다.
+            }, {
+
+            }).addTo(compositeDisposable)
+    }
+
+    private fun exampleFlowable1() {
+        Flowable.just(System.currentTimeMillis())
+            .subscribe(object : Consumer<Long> {
+                override fun accept(t: Long) {
+                    Timber.d("SUCC $t")
+                }
+            }, object : Consumer<Throwable> {
+                override fun accept(t: Throwable) {
+                    Timber.d("ERROR")
+                }
+            }, object : Action {
+                override fun run() {
+                    Timber.d("onCompleted")
+                }
+            }).addTo(compositeDisposable)
+
+        Flowable.create<Long>(object : FlowableOnSubscribe<Long> {
+            override fun subscribe(emitter: FlowableEmitter<Long>) {
+                val ran = Random.nextInt(0 until 10)
+                if (ran < 3) {
+                    emitter.onNext(System.currentTimeMillis())
+                } else if (ran in 3..5) {
+                    emitter.onError(RuntimeException("Sample Error"))
+                } else {
+                    emitter.onComplete()
+                }
+            }
+        }, BackpressureStrategy.BUFFER)
+            .subscribe(object : Consumer<Long> {
+                override fun accept(t: Long) {
+                    Timber.d("SUCC $t")
+                }
+            }, object : Consumer<Throwable> {
+                override fun accept(t: Throwable) {
+                    Timber.d("ERROR")
+                }
+            }, object : Action {
+                override fun run() {
+                    Timber.d("onCompleted")
+                }
+            }).addTo(compositeDisposable)
+    }
+
+    private fun exampleColdObservable(){
+        Flowable.interval(1000,TimeUnit.MILLISECONDS)
+            .onBackpressureBuffer()
+            .subscribe({
+                // Do Working
+            },{
+
+            }).addTo(compositeDisposable)
+    }
+
+    private val behavior = BehaviorProcessor.create<Long>()
+    private val publisher = PublishProcessor.create<Long>()
+
+    private fun exampleHotObservable(){
+        publisher.subscribe({
+            Timber.d("One Sub $it")
+        },{
+
+        })
+        publisher.onNext(System.currentTimeMillis())
+        publisher.subscribe({
+            Timber.d("Two Sub $it")
+        },{
+
+        })
+
     }
 
     override fun onDestroy() {

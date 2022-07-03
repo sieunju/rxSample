@@ -3,6 +3,7 @@ package com.hmju.rx
 import android.app.Application
 import io.reactivex.rxjava3.exceptions.UndeliverableException
 import io.reactivex.rxjava3.plugins.RxJavaPlugins
+import timber.log.Timber
 import java.io.IOException
 import java.net.SocketException
 
@@ -15,6 +16,7 @@ class MainApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        initTimber()
         initRxJava()
     }
 
@@ -52,5 +54,15 @@ class MainApplication : Application() {
                 return@setErrorHandler
             }
         }
+    }
+
+    private fun initTimber() {
+        Timber.plant(object : Timber.DebugTree() {
+
+            override fun createStackElementTag(element: StackTraceElement): String {
+                return "Timber_${element.className}"
+                // return "Timber_${element.methodName.substringBeforeLast(".")}"
+            }
+        })
     }
 }

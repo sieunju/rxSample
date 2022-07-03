@@ -10,12 +10,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SimpleResponse(
     val status : Boolean = false,
-    val data : SimpleData
+    val data : SimpleData? = null
 )
 
 @Serializable
 data class SimpleData(
-    val payload : SimplePayload
+    val payload : SimplePayload?
 )
 
 @Serializable
